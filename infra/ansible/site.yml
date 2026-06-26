@@ -1,0 +1,45 @@
+---
+- name: Install PostgreSQL on all nodes
+  hosts: primary,sync_standby,async_standby
+  become: yes
+  vars_files:
+    - vars.yml
+    - vars.vault.yml
+  roles:
+    - install
+
+- name: Configure primary node
+  hosts: primary
+  become: yes
+  vars_files:
+    - vars.yml
+    - vars.vault.yml
+  roles:
+    - primary
+
+- name: Configure sync standby node
+  hosts: sync_standby
+  become: yes
+  vars_files:
+    - vars.yml
+    - vars.vault.yml
+  roles:
+    - sync_standby
+
+- name: Configure async standby node
+  hosts: async_standby
+  become: yes
+  vars_files:
+    - vars.yml
+    - vars.vault.yml
+  roles:
+    - async_standby
+
+- name: Configure backup on primary
+  hosts: primary
+  become: yes
+  vars_files:
+    - vars.yml
+    - vars.vault.yml
+  roles:
+    - backup

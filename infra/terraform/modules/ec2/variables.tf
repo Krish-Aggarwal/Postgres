@@ -1,0 +1,9 @@
+variable "ami_id"              {}
+variable "instance_type"       {}
+variable "key_name"            {}
+variable "public_subnet_id"    {}
+variable "private_subnet_1_id" {}
+variable "private_subnet_2_id" {}
+variable "private_subnet_3_id" {}
+variable "security_group_id"   {}
+variable "iam_profile_name"    {}

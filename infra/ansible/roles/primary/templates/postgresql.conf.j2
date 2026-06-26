@@ -1,0 +1,40 @@
+#------------------------------------------------------------------------------
+# CONNECTION
+#------------------------------------------------------------------------------
+listen_addresses          = '*'
+port                      = {{ postgres_port }}
+max_connections           = 100
+
+#------------------------------------------------------------------------------
+# REPLICATION
+#------------------------------------------------------------------------------
+wal_level                 = replica
+max_wal_senders           = 10
+wal_keep_size             = 512
+max_replication_slots     = 10
+hot_standby               = on
+
+# Sync standby - AZ-b must confirm before commit
+# Async standby - AZ-c does not block commits
+synchronous_standby_names = 'FIRST 1 (sync_standby_az_b)'
+
+#------------------------------------------------------------------------------
+# PERFORMANCE
+#------------------------------------------------------------------------------
+shared_buffers            = 128MB
+work_mem                  = 4MB
+maintenance_work_mem      = 64MB
+effective_cache_size      = 256MB
+checkpoint_completion_target = 0.9
+wal_buffers               = 16MB
+
+#------------------------------------------------------------------------------
+# LOGGING
+#------------------------------------------------------------------------------
+logging_collector         = on
+log_directory             = 'log'
+log_filename              = 'postgresql-%Y-%m-%d.log'
+log_min_duration_statement = 1000
+log_connections           = on
+log_disconnections        = on
+log_replication_commands  = on

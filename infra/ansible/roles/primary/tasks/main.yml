@@ -1,0 +1,55 @@
+---
+- name: Deploy postgresql.conf
+  template:
+    src: postgresql.conf.j2
+    dest: "{{ postgres_conf_dir }}/postgresql.conf"
+    owner: postgres
+    group: postgres
+    mode: '0644'
+  notify: Restart PostgreSQL
+
+- name: Deploy pg_hba.conf
+  template:
+    src: pg_hba.conf.j2
+    dest: "{{ postgres_conf_dir }}/pg_hba.conf"
+    owner: postgres
+    group: postgres
+    mode: '0640'
+  notify: Restart PostgreSQL
+
+- name: Flush handlers so PostgreSQL restarts before user creation
+  meta: flush_handlers
+
+- name: Create replication user
+  become_user: postgres
+  shell: |
+    psql -c "
+    DO \$\$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT FROM pg_roles WHERE rolname = '{{ replication_user }}'
+      ) THEN
+        CREATE ROLE {{ replication_user }}
+        WITH REPLICATION LOGIN
+        PASSWORD '{{ replication_password }}';
+      END IF;
+    END
+    \$\$;"
+  changed_when: false
+
+- name: Verify primary is accepting connections
+  become_user: postgres
+  shell: psql -c "SELECT version();"
+  register: pg_version
+  failed_when: pg_version.rc != 0
+  changed_when: false
+
+- name: Show PostgreSQL version
+  debug:
+    msg: "{{ pg_version.stdout }}"
+
+handlers:
+  - name: Restart PostgreSQL
+    service:
+      name: postgresql
+      state: restarted
