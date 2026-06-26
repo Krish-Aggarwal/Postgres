@@ -4,7 +4,6 @@
   become: yes
   vars_files:
     - vars.yml
-    - vars.vault.yml
   roles:
     - install
 
@@ -13,7 +12,6 @@
   become: yes
   vars_files:
     - vars.yml
-    - vars.vault.yml
   roles:
     - primary
 
@@ -22,7 +20,6 @@
   become: yes
   vars_files:
     - vars.yml
-    - vars.vault.yml
   roles:
     - sync_standby
 
@@ -31,7 +28,6 @@
   become: yes
   vars_files:
     - vars.yml
-    - vars.vault.yml
   roles:
     - async_standby
 
@@ -40,6 +36,5 @@
   become: yes
   vars_files:
     - vars.yml
-    - vars.vault.yml
   roles:
     - backup
