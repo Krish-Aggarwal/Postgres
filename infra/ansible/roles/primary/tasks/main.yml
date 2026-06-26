@@ -106,9 +106,3 @@
 - name: Show PostgreSQL version
   debug:
     msg: "{{ pg_version.stdout }}"
-
-handlers:
-  - name: Restart PostgreSQL
-    service:
-      name: postgresql
-      state: restarted
