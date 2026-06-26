@@ -4,12 +4,21 @@
     name: postgresql
     state: stopped
 
-- name: Remove existing data directory
+- name: Check if data directory exists
+  stat:
+    path: "{{ postgres_data_dir }}/PG_VERSION"
+  register: standby_initialized
+
+- name: Drop existing cluster on async standby
+  shell: pg_dropcluster --stop {{ postgres_version }} main || true
+  when: standby_initialized.stat.exists
+
+- name: Remove data directory
   file:
     path: "{{ postgres_data_dir }}"
     state: absent
 
-- name: Create fresh data directory
+- name: Create empty data directory
   file:
     path: "{{ postgres_data_dir }}"
     state: directory
@@ -33,7 +42,7 @@
   register: basebackup_result
   failed_when: basebackup_result.rc != 0
 
-- name: Set application_name for async standby in postgresql.auto.conf
+- name: Set application_name for async standby
   lineinfile:
     path: "{{ postgres_data_dir }}/postgresql.auto.conf"
     line: "application_name = 'async_standby_az_c'"
@@ -51,6 +60,15 @@
     name: postgresql
     state: started
     enabled: yes
+
+- name: Wait for async standby to be ready
+  become_user: postgres
+  shell: pg_isready -p {{ postgres_port }}
+  register: pg_ready
+  retries: 10
+  delay: 3
+  until: pg_ready.rc == 0
+  changed_when: false
 
 - name: Verify async standby is in recovery mode
   become_user: postgres
