@@ -1,4 +1,32 @@
 ---
+- name: Check if PostgreSQL cluster is initialized
+  stat:
+    path: "{{ postgres_data_dir }}/PG_VERSION"
+  register: pg_initialized
+
+- name: Drop broken cluster
+  shell: pg_dropcluster --stop {{ postgres_version }} main || true
+  when: not pg_initialized.stat.exists
+
+- name: Create fresh PostgreSQL cluster
+  shell: pg_createcluster {{ postgres_version }} main
+  when: not pg_initialized.stat.exists
+
+- name: Ensure PostgreSQL is started after cluster creation
+  service:
+    name: postgresql
+    state: started
+    enabled: yes
+
+- name: Wait for PostgreSQL to be ready
+  become_user: postgres
+  shell: pg_isready -p {{ postgres_port }}
+  register: pg_ready
+  retries: 10
+  delay: 3
+  until: pg_ready.rc == 0
+  changed_when: false
+
 - name: Deploy postgresql.conf
   template:
     src: postgresql.conf.j2
@@ -20,6 +48,15 @@
 - name: Flush handlers so PostgreSQL restarts before user creation
   meta: flush_handlers
 
+- name: Wait for PostgreSQL to be ready after restart
+  become_user: postgres
+  shell: pg_isready -p {{ postgres_port }}
+  register: pg_ready_after
+  retries: 10
+  delay: 3
+  until: pg_ready_after.rc == 0
+  changed_when: false
+
 - name: Create replication user
   become_user: postgres
   shell: |
@@ -37,6 +74,28 @@
     \$\$;"
   changed_when: false
 
+- name: Create replication slot for sync standby
+  become_user: postgres
+  shell: |
+    psql -c "
+    SELECT pg_create_physical_replication_slot('sync_standby_slot')
+    WHERE NOT EXISTS (
+      SELECT 1 FROM pg_replication_slots
+      WHERE slot_name = 'sync_standby_slot'
+    );"
+  changed_when: false
+
+- name: Create replication slot for async standby
+  become_user: postgres
+  shell: |
+    psql -c "
+    SELECT pg_create_physical_replication_slot('async_standby_slot')
+    WHERE NOT EXISTS (
+      SELECT 1 FROM pg_replication_slots
+      WHERE slot_name = 'async_standby_slot'
+    );"
+  changed_when: false
+
 - name: Verify primary is accepting connections
   become_user: postgres
   shell: psql -c "SELECT version();"
@@ -47,3 +106,9 @@
 - name: Show PostgreSQL version
   debug:
     msg: "{{ pg_version.stdout }}"
+
+handlers:
+  - name: Restart PostgreSQL
+    service:
+      name: postgresql
+      state: restarted
