@@ -4,6 +4,7 @@
   become: yes
   vars_files:
     - vars.yml
+  tags: install
   roles:
     - install
 
@@ -12,6 +13,7 @@
   become: yes
   vars_files:
     - vars.yml
+  tags: primary
   roles:
     - primary
 
@@ -20,6 +22,7 @@
   become: yes
   vars_files:
     - vars.yml
+  tags: sync_standby
   roles:
     - sync_standby
 
@@ -28,6 +31,7 @@
   become: yes
   vars_files:
     - vars.yml
+  tags: async_standby
   roles:
     - async_standby
 
@@ -36,5 +40,6 @@
   become: yes
   vars_files:
     - vars.yml
+  tags: backup
   roles:
     - backup
