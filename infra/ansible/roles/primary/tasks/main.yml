@@ -33,7 +33,7 @@
     dest: "{{ postgres_conf_dir }}/postgresql.conf"
     owner: postgres
     group: postgres
-    mode: '0644'
+    mode: "0644"
   notify: Restart PostgreSQL
 
 - name: Deploy pg_hba.conf
@@ -42,11 +42,50 @@
     dest: "{{ postgres_conf_dir }}/pg_hba.conf"
     owner: postgres
     group: postgres
-    mode: '0640'
+    mode: "0640"
   notify: Restart PostgreSQL
 
-- name: Flush handlers so PostgreSQL restarts before user creation
+- name: Flush handlers
   meta: flush_handlers
+
+- name: Wait 5 seconds after restart
+  pause:
+    seconds: 5
+
+- name: Check PostgreSQL status
+  command: systemctl status postgresql --no-pager
+  register: pg_status
+  ignore_errors: yes
+  changed_when: false
+
+- name: Show PostgreSQL status
+  debug:
+    var: pg_status.stdout_lines
+
+- name: Show PostgreSQL journal
+  command: journalctl -u postgresql -n 100 --no-pager
+  register: pg_journal
+  ignore_errors: yes
+  changed_when: false
+
+- name: Display PostgreSQL journal
+  debug:
+    var: pg_journal.stdout_lines
+
+- name: Show PostgreSQL log
+  shell: |
+    if [ -f /var/log/postgresql/postgresql-{{ postgres_version }}-main.log ]; then
+      tail -100 /var/log/postgresql/postgresql-{{ postgres_version }}-main.log
+    else
+      echo "PostgreSQL log file not found"
+    fi
+  register: pg_log
+  ignore_errors: yes
+  changed_when: false
+
+- name: Display PostgreSQL log
+  debug:
+    var: pg_log.stdout_lines
 
 - name: Wait for PostgreSQL to be ready after restart
   become_user: postgres
@@ -60,49 +99,30 @@
 - name: Create replication user
   become_user: postgres
   shell: |
-    psql -c "
-    DO \$\$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT FROM pg_roles WHERE rolname = '{{ replication_user }}'
-      ) THEN
-        CREATE ROLE {{ replication_user }}
-        WITH REPLICATION LOGIN
-        PASSWORD '{{ replication_password }}';
-      END IF;
-    END
-    \$\$;"
+    psql -tc "SELECT 1 FROM pg_roles WHERE rolname='{{ replication_user }}'" | grep -q 1 || \
+    psql -c "CREATE ROLE {{ replication_user }} WITH REPLICATION LOGIN PASSWORD '{{ replication_password }}';"
   changed_when: false
 
-- name: Create replication slot for sync standby
+- name: Create sync replication slot
   become_user: postgres
   shell: |
-    psql -c "
-    SELECT pg_create_physical_replication_slot('sync_standby_slot')
-    WHERE NOT EXISTS (
-      SELECT 1 FROM pg_replication_slots
-      WHERE slot_name = 'sync_standby_slot'
-    );"
+    psql -tc "SELECT 1 FROM pg_replication_slots WHERE slot_name='sync_standby_slot'" | grep -q 1 || \
+    psql -c "SELECT pg_create_physical_replication_slot('sync_standby_slot');"
   changed_when: false
 
-- name: Create replication slot for async standby
+- name: Create async replication slot
   become_user: postgres
   shell: |
-    psql -c "
-    SELECT pg_create_physical_replication_slot('async_standby_slot')
-    WHERE NOT EXISTS (
-      SELECT 1 FROM pg_replication_slots
-      WHERE slot_name = 'async_standby_slot'
-    );"
+    psql -tc "SELECT 1 FROM pg_replication_slots WHERE slot_name='async_standby_slot'" | grep -q 1 || \
+    psql -c "SELECT pg_create_physical_replication_slot('async_standby_slot');"
   changed_when: false
 
-- name: Verify primary is accepting connections
+- name: Verify PostgreSQL
   become_user: postgres
   shell: psql -c "SELECT version();"
-  register: pg_version
-  failed_when: pg_version.rc != 0
+  register: pg_version_out
   changed_when: false
 
 - name: Show PostgreSQL version
   debug:
-    msg: "{{ pg_version.stdout }}"
+    var: pg_version_out.stdout_lines
