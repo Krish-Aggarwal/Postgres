@@ -1,5 +1,4 @@
 ---
 - name: Restart PostgreSQL
-  service:
-    name: "{{ postgres_service }}"
-    state: restarted
+  shell: pg_ctlcluster {{ postgres_version }} main restart
+  become: yes
