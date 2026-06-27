@@ -45,17 +45,19 @@
   shell: pg_createcluster {{ postgres_version }} main
   when: not pg_initialized.stat.exists
 
-- name: Ensure PostgreSQL cluster is started and enabled
-  service:
-    name: "postgresql@{{ postgres_version }}-main"
-    state: started
-    enabled: yes
+- name: Start PostgreSQL cluster using pg_ctlcluster
+  shell: pg_ctlcluster {{ postgres_version }} main start || true
+  become: yes
+
+- name: Enable PostgreSQL service
+  shell: systemctl enable {{ postgres_service }}
+  become: yes
 
 - name: Wait for PostgreSQL to be ready
   become_user: postgres
   shell: pg_isready -h /var/run/postgresql -p {{ postgres_port }}
   register: pg_ready
-  retries: 10
+  retries: 15
   delay: 3
   until: pg_ready.rc == 0
   changed_when: false
