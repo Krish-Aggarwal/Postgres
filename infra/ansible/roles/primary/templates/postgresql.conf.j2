@@ -10,12 +10,9 @@ max_connections           = 100
 #------------------------------------------------------------------------------
 wal_level                 = replica
 max_wal_senders           = 10
-wal_keep_size             = 512
+wal_keep_size             = 512MB
 max_replication_slots     = 10
 hot_standby               = on
-
-# Sync standby - AZ-b must confirm before commit
-# Async standby - AZ-c does not block commits
 synchronous_standby_names = 'FIRST 1 (sync_standby_az_b)'
 
 #------------------------------------------------------------------------------
