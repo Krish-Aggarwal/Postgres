@@ -3,6 +3,7 @@ postgres_port:          5432
 postgres_data_dir:      "/var/lib/postgresql/17/main"
 postgres_conf_dir:      "/etc/postgresql/17/main"
 postgres_bin_dir:       "/usr/lib/postgresql/17/bin"
+postgres_service:       "postgresql@17-main"
 backup_dir:             "/tmp/pg_backups"
 backup_bucket:          "postgres-backup-us-east-1-99999999"
 replication_user:       "replicator"
