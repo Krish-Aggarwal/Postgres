@@ -14,7 +14,7 @@
 
 - name: Ensure PostgreSQL cluster is started
   service:
-    name: "postgresql@{{ postgres_version }}-main"
+    name: "{{ postgres_service }}"
     state: started
     enabled: yes
 
@@ -47,6 +47,26 @@
 
 - name: Flush handlers so PostgreSQL restarts with new config
   meta: flush_handlers
+
+- name: Get PostgreSQL log after restart attempt
+  shell: tail -30 /var/log/postgresql/postgresql-{{ postgres_version }}-main.log
+  register: pg_error_log
+  changed_when: false
+  ignore_errors: yes
+
+- name: Show PostgreSQL error log
+  debug:
+    msg: "{{ pg_error_log.stdout_lines }}"
+
+- name: Get systemd journal for PostgreSQL
+  shell: journalctl -xeu postgresql@{{ postgres_version }}-main --no-pager -n 30
+  register: pg_journal
+  changed_when: false
+  ignore_errors: yes
+
+- name: Show systemd journal
+  debug:
+    msg: "{{ pg_journal.stdout_lines }}"
 
 - name: Wait for PostgreSQL to be ready after restart
   become_user: postgres
