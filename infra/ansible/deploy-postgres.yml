@@ -1,0 +1,33 @@
+---
+- name: Deploy High Availability PostgreSQL Cluster
+  hosts: primary, standby
+  become: yes
+  vars:
+    postgres_version: "15"
+    replication_user: "replicator"
+    replication_password: "SecureReplicationPassword123!" # Change to vault/secure var in production
+  
+  roles:
+    - postgres_base
+
+- name: Initialize Primary Configuration Orchestration
+  hosts: primary
+  become: yes
+  vars:
+    postgres_version: "15"
+    replication_user: "replicator"
+    replication_password: "SecureReplicationPassword123!"
+  
+  roles:
+    - postgres_primary
+
+- name: Initialize Replication Sequence on Standby Instances
+  hosts: standby
+  become: yes
+  vars:
+    postgres_version: "15"
+    replication_user: "replicator"
+    replication_password: "SecureReplicationPassword123!"
+  
+  roles:
+    - postgres_standby
