@@ -32,8 +32,30 @@
     state: present
     update_cache: yes
 
-- name: Ensure PostgreSQL is started and enabled
+- name: Check if PostgreSQL cluster is initialized
+  stat:
+    path: "{{ postgres_data_dir }}/PG_VERSION"
+  register: pg_initialized
+
+- name: Drop broken cluster if not initialized
+  shell: pg_dropcluster --stop {{ postgres_version }} main || true
+  when: not pg_initialized.stat.exists
+
+- name: Create fresh PostgreSQL cluster
+  shell: pg_createcluster {{ postgres_version }} main
+  when: not pg_initialized.stat.exists
+
+- name: Ensure PostgreSQL cluster is started and enabled
   service:
-    name: postgresql
+    name: "postgresql@{{ postgres_version }}-main"
     state: started
     enabled: yes
+
+- name: Wait for PostgreSQL to be ready
+  become_user: postgres
+  shell: pg_isready -h /var/run/postgresql -p {{ postgres_port }}
+  register: pg_ready
+  retries: 10
+  delay: 3
+  until: pg_ready.rc == 0
+  changed_when: false
