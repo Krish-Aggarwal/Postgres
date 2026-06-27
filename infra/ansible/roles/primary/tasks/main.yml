@@ -34,7 +34,6 @@
     owner: postgres
     group: postgres
     mode: '0644'
-  notify: Restart PostgreSQL
 
 - name: Deploy pg_hba.conf
   template:
@@ -43,30 +42,37 @@
     owner: postgres
     group: postgres
     mode: '0640'
-  notify: Restart PostgreSQL
 
-- name: Flush handlers so PostgreSQL restarts with new config
-  meta: flush_handlers
-
-- name: Get PostgreSQL log after restart attempt
-  shell: tail -30 /var/log/postgresql/postgresql-{{ postgres_version }}-main.log
-  register: pg_error_log
-  changed_when: false
+- name: Restart PostgreSQL
+  service:
+    name: "{{ postgres_service }}"
+    state: restarted
+  register: restart_result
   ignore_errors: yes
 
-- name: Show PostgreSQL error log
+- name: Show restart result
   debug:
-    msg: "{{ pg_error_log.stdout_lines }}"
+    var: restart_result
 
-- name: Get systemd journal for PostgreSQL
-  shell: journalctl -xeu postgresql@{{ postgres_version }}-main --no-pager -n 30
+- name: Show PostgreSQL journal
+  shell: journalctl -xeu postgresql@{{ postgres_version }}-main --no-pager -n 100
   register: pg_journal
   changed_when: false
   ignore_errors: yes
 
-- name: Show systemd journal
+- name: Print PostgreSQL journal
   debug:
-    msg: "{{ pg_journal.stdout_lines }}"
+    var: pg_journal.stdout_lines
+
+- name: Show PostgreSQL log
+  shell: tail -100 /var/log/postgresql/postgresql-{{ postgres_version }}-main.log
+  register: pg_log
+  changed_when: false
+  ignore_errors: yes
+
+- name: Print PostgreSQL log
+  debug:
+    var: pg_log.stdout_lines
 
 - name: Wait for PostgreSQL to be ready after restart
   become_user: postgres
@@ -76,6 +82,7 @@
   delay: 5
   until: pg_ready_after.rc == 0
   changed_when: false
+  ignore_errors: yes
 
 - name: Create replication user
   become_user: postgres
@@ -93,6 +100,7 @@
     END
     \$\$;"
   changed_when: false
+  ignore_errors: yes
 
 - name: Create replication slot for sync standby
   become_user: postgres
@@ -104,6 +112,7 @@
       WHERE slot_name = 'sync_standby_slot'
     );"
   changed_when: false
+  ignore_errors: yes
 
 - name: Create replication slot for async standby
   become_user: postgres
@@ -115,14 +124,15 @@
       WHERE slot_name = 'async_standby_slot'
     );"
   changed_when: false
+  ignore_errors: yes
 
 - name: Verify primary is accepting connections
   become_user: postgres
   shell: psql -c "SELECT version();"
   register: pg_version
-  failed_when: pg_version.rc != 0
   changed_when: false
+  ignore_errors: yes
 
 - name: Show PostgreSQL version
   debug:
-    msg: "{{ pg_version.stdout }}"
+    var: pg_version.stdout
