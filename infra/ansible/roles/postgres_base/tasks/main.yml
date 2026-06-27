@@ -1,0 +1,16 @@
+---
+- name: Update apt cache and install PostgreSQL components
+  apt:
+    name:
+      - "postgresql-{{ postgres_version }}"
+      - "postgresql-client-{{ postgres_version }}"
+      - python3-psycopg2
+    state: present
+    update_cache: yes
+
+- name: Allow PostgreSQL to listen on all network interfaces
+  lineinfile:
+    path: "/etc/postgresql/{{ postgres_version }}/main/postgresql.conf"
+    regexp: "^#?listen_addresses\\s*="
+    line: "listen_addresses = '*'"
+  notify: restart postgres

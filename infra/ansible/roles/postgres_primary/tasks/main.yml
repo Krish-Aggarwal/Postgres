@@ -1,0 +1,23 @@
+---
+- name: Create the dedicated replication user
+  become_user: postgres
+  postgresql_user:
+    name: "{{ replication_user }}"
+    password: "{{ replication_password }}"
+    role_attr_flags: "REPLICATION"
+    encrypted: yes
+
+- name: Grant replication access in pg_hba.conf for standby nodes
+  blockinfile:
+    path: "/etc/postgresql/{{ postgres_version }}/main/pg_hba.conf"
+    block: |
+      host replication {{ replication_user }} {{ hostvars[groups['sync_standby'][0]]['ansible_facts']['default_ipv4']['address'] }}/32 md5
+      host replication {{ replication_user }} {{ hostvars[groups['async_standby'][0]]['ansible_facts']['default_ipv4']['address'] }}/32 md5
+  notify: reload postgres
+
+- name: Configure master node for zero-data-loss synchronous replication
+  lineinfile:
+    path: "/etc/postgresql/{{ postgres_version }}/main/postgresql.conf"
+    regexp: "^#?synchronous_standby_names\\s*="
+    line: "synchronous_standby_names = 'FIRST 1 (sync_node)'"
+  notify: reload postgres
