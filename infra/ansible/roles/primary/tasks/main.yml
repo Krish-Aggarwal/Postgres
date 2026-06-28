@@ -64,10 +64,10 @@
     var: restart_result
 
 - name: Show PostgreSQL journal
-  shell: journalctl -xeu postgresql@{{ postgres_version }}-main --no-pager -n 100
-  register: pg_journal
-  changed_when: false
-  ignore_errors: yes
+    shell: journalctl -xeu postgresql@{{ postgres_version }}-main --no-pager -n 100
+    register: pg_journal
+    changed_when: false
+    ignore_errors: yes
 
 - name: Print PostgreSQL journal
   debug:
