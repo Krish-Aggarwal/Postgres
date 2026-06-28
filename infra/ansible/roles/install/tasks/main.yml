@@ -18,8 +18,7 @@
 
 - name: Add PostgreSQL apt repository
   apt_repository:
-    repo: "deb http://apt.postgresql.org/pub/repos/apt \
-           {{ ansible_distribution_release }}-pgdg main"
+    repo: "deb http://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
     state: present
     filename: pgdg
 
@@ -31,6 +30,14 @@
       - postgresql-contrib
     state: present
     update_cache: yes
+
+- name: Reset failed systemd unit
+  shell: systemctl reset-failed postgresql@{{ postgres_version }}-main || true
+
+- name: Remove stale pid file if present
+  file:
+    path: /var/run/postgresql/{{ postgres_version }}-main.pid
+    state: absent
 
 - name: Check if PostgreSQL cluster is initialized
   stat:
@@ -45,9 +52,36 @@
   shell: pg_createcluster {{ postgres_version }} main
   when: not pg_initialized.stat.exists
 
+- name: Show cluster status before start
+  shell: pg_lsclusters
+  register: cluster_status
+  changed_when: false
+
+- name: Print cluster status
+  debug:
+    var: cluster_status.stdout_lines
+
 - name: Start PostgreSQL cluster using pg_ctlcluster
-  shell: pg_ctlcluster {{ postgres_version }} main start || true
+  shell: pg_ctlcluster {{ postgres_version }} main start
   become: yes
+  register: start_result
+  ignore_errors: yes
+
+- name: Print start result
+  debug:
+    var: start_result
+
+- name: Show PostgreSQL journal if start failed
+  shell: journalctl -xeu postgresql@{{ postgres_version }}-main --no-pager -n 50
+  register: pg_journal
+  changed_when: false
+  ignore_errors: yes
+  when: start_result.rc is defined and start_result.rc != 0
+
+- name: Print journal
+  debug:
+    var: pg_journal.stdout_lines
+  when: start_result.rc is defined and start_result.rc != 0
 
 - name: Enable PostgreSQL service
   shell: systemctl enable {{ postgres_service }}
