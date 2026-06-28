@@ -35,7 +35,7 @@
     group: postgres
     mode: '0644'
 
-  - name: Verify postgresql.conf data_directory line
+- name: Verify postgresql.conf data_directory line
   shell: grep data_directory {{ postgres_conf_dir }}/postgresql.conf
   register: conf_check
   changed_when: false
@@ -53,9 +53,10 @@
     mode: '0640'
 
 - name: Restart PostgreSQL
-  service:
-    name: "{{ postgres_service }}"
-    state: restarted
+  shell: |
+    systemctl kill -s SIGQUIT postgresql@{{ postgres_version }}-main || true
+    sleep 2
+    systemctl start postgresql@{{ postgres_version }}-main
   register: restart_result
   ignore_errors: yes
 
@@ -64,10 +65,10 @@
     var: restart_result
 
 - name: Show PostgreSQL journal
-    shell: journalctl -xeu postgresql@{{ postgres_version }}-main --no-pager -n 100
-    register: pg_journal
-    changed_when: false
-    ignore_errors: yes
+  shell: journalctl -xeu postgresql@{{ postgres_version }}-main --no-pager -n 100
+  register: pg_journal
+  changed_when: false
+  ignore_errors: yes
 
 - name: Print PostgreSQL journal
   debug:
