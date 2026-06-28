@@ -97,44 +97,33 @@
 - name: Create replication user
   become_user: postgres
   shell: |
-    psql -X -d postgres -c "
-    DO \$\$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT FROM pg_roles WHERE rolname = '{{ replication_user }}'
-      ) THEN
-        CREATE ROLE {{ replication_user }}
-        WITH REPLICATION LOGIN
-        PASSWORD '{{ replication_password }}';
-      END IF;
-    END
-    \$\$;"
+    psql -X -d postgres -tc "SELECT 1 FROM pg_roles WHERE rolname='{{ replication_user }}'" | grep -q 1 || \
+    psql -X -d postgres -c "CREATE ROLE {{ replication_user }} WITH REPLICATION LOGIN PASSWORD '{{ replication_password }}';"
   changed_when: false
   ignore_errors: yes
   timeout: 30
 
+- name: Verify replication user exists
+  become_user: postgres
+  shell: psql -X -d postgres -tc "SELECT rolname FROM pg_roles WHERE rolname='{{ replication_user }}';"
+  register: replication_user_check
+  changed_when: false
+  timeout: 30
+
+- name: Print replication user check
+  debug:
+    var: replication_user_check.stdout
+
 - name: Create replication slot for sync standby
   become_user: postgres
-  shell: |
-    psql -X -d postgres -c "
-    SELECT pg_create_physical_replication_slot('sync_standby_slot')
-    WHERE NOT EXISTS (
-      SELECT 1 FROM pg_replication_slots
-      WHERE slot_name = 'sync_standby_slot'
-    );"
+  shell: psql -X -d postgres -c "SELECT pg_create_physical_replication_slot('sync_standby_slot') WHERE NOT EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'sync_standby_slot');"
   changed_when: false
   ignore_errors: yes
   timeout: 30
-  
+
 - name: Create replication slot for async standby
   become_user: postgres
-  shell: |
-    psql -X -d postgres -c "
-    SELECT pg_create_physical_replication_slot('async_standby_slot')
-    WHERE NOT EXISTS (
-      SELECT 1 FROM pg_replication_slots
-      WHERE slot_name = 'async_standby_slot'
-    );"
+  shell: psql -X -d postgres -c "SELECT pg_create_physical_replication_slot('async_standby_slot') WHERE NOT EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'async_standby_slot');"
   changed_when: false
   ignore_errors: yes
   timeout: 30
