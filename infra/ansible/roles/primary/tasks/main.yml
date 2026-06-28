@@ -97,7 +97,7 @@
 - name: Create replication user
   become_user: postgres
   shell: |
-    psql -c "
+    psql -X -d postgres -c "
     DO \$\$
     BEGIN
       IF NOT EXISTS (
@@ -111,11 +111,12 @@
     \$\$;"
   changed_when: false
   ignore_errors: yes
+  timeout: 30
 
 - name: Create replication slot for sync standby
   become_user: postgres
   shell: |
-    psql -c "
+    psql -X -d postgres -c "
     SELECT pg_create_physical_replication_slot('sync_standby_slot')
     WHERE NOT EXISTS (
       SELECT 1 FROM pg_replication_slots
@@ -123,11 +124,12 @@
     );"
   changed_when: false
   ignore_errors: yes
-
+  timeout: 30
+  
 - name: Create replication slot for async standby
   become_user: postgres
   shell: |
-    psql -c "
+    psql -X -d postgres -c "
     SELECT pg_create_physical_replication_slot('async_standby_slot')
     WHERE NOT EXISTS (
       SELECT 1 FROM pg_replication_slots
@@ -135,13 +137,15 @@
     );"
   changed_when: false
   ignore_errors: yes
+  timeout: 30
 
 - name: Verify primary is accepting connections
   become_user: postgres
-  shell: psql -c "SELECT version();"
+  shell: psql -X -d postgres -c "SELECT version();"
   register: pg_version
   changed_when: false
   ignore_errors: yes
+  timeout: 30
 
 - name: Show PostgreSQL version
   debug:
