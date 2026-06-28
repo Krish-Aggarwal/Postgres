@@ -1,17 +1,15 @@
 ---
-- name: Stop PostgreSQL on async standby
+- name: Stop PostgreSQL on sync standby
   service:
-    name: "postgresql@{{ postgres_version }}-main"
+    name: "{{ postgres_service }}"
     state: stopped
+  ignore_errors: yes
 
-- name: Check if data directory exists
-  stat:
-    path: "{{ postgres_data_dir }}/PG_VERSION"
-  register: standby_initialized
+- name: Reset failed systemd unit
+  shell: systemctl reset-failed postgresql@{{ postgres_version }}-main || true
 
-- name: Drop existing cluster on async standby
+- name: Drop existing cluster on sync standby
   shell: pg_dropcluster --stop {{ postgres_version }} main || true
-  when: standby_initialized.stat.exists
 
 - name: Remove data directory
   file:
@@ -36,17 +34,20 @@
       -P \
       -R \
       --wal-method=stream \
-      --slot=async_standby_slot
+      --slot=sync_standby_slot
   environment:
     PGPASSWORD: "{{ replication_password }}"
   register: basebackup_result
   failed_when: basebackup_result.rc != 0
 
-- name: Set application_name for async standby
+- name: Set application_name for sync standby
   lineinfile:
     path: "{{ postgres_data_dir }}/postgresql.auto.conf"
-    line: "application_name = 'async_standby_az_c'"
+    line: "application_name = 'sync_standby_az_b'"
     state: present
+
+- name: Recreate cluster config using existing data directory
+  shell: pg_createcluster {{ postgres_version }} main --datadir {{ postgres_data_dir }} || true
 
 - name: Set correct ownership on data directory
   file:
@@ -55,13 +56,23 @@
     group: postgres
     recurse: yes
 
-- name: Start PostgreSQL on async standby
+- name: Set correct ownership on config directory
+  file:
+    path: /etc/postgresql/{{ postgres_version }}/main
+    owner: postgres
+    group: postgres
+    recurse: yes
+
+- name: Reset failed systemd unit before start
+  shell: systemctl reset-failed postgresql@{{ postgres_version }}-main || true
+
+- name: Start PostgreSQL on sync standby
   service:
-    name: "postgresql@{{ postgres_version }}-main"
+    name: "{{ postgres_service }}"
     state: started
     enabled: yes
 
-- name: Wait for async standby to be ready
+- name: Wait for sync standby to be ready
   become_user: postgres
   shell: pg_isready -p {{ postgres_port }}
   register: pg_ready
@@ -70,9 +81,9 @@
   until: pg_ready.rc == 0
   changed_when: false
 
-- name: Verify async standby is in recovery mode
+- name: Verify sync standby is in recovery mode
   become_user: postgres
-  shell: psql -c "SELECT pg_is_in_recovery();"
+  shell: psql -X -d postgres -c "SELECT pg_is_in_recovery();"
   register: recovery_check
   failed_when: "'t' not in recovery_check.stdout"
   changed_when: false
