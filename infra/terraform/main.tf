@@ -40,16 +40,16 @@ module "ec2" {
 resource "local_file" "inventory" {
   content = <<-EOF
 [bastion]
-${module.ec2.bastion_public_ip}
+bastion ansible_host=${module.ec2.bastion_public_ip}
 
 [primary]
-${module.ec2.primary_private_ip}
+primary ansible_host=${module.ec2.primary_private_ip}
 
 [sync_standby]
-${module.ec2.sync_standby_private_ip}
+sync_standby ansible_host=${module.ec2.sync_standby_private_ip}
 
 [async_standby]
-${module.ec2.async_standby_private_ip}
+async_standby ansible_host=${module.ec2.async_standby_private_ip}
 
 [standby:children]
 sync_standby
