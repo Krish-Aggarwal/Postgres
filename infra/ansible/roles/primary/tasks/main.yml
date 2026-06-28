@@ -27,6 +27,37 @@
   until: pg_ready.rc == 0
   changed_when: false
 
+- name: Create replication user
+  become_user: postgres
+  shell: |
+    psql -X -d postgres -tc "SELECT 1 FROM pg_roles WHERE rolname='{{ replication_user }}'" | grep -q 1 || \
+    psql -X -d postgres -c "CREATE ROLE {{ replication_user }} WITH REPLICATION LOGIN PASSWORD '{{ replication_password }}';"
+  changed_when: false
+  timeout: 30
+
+- name: Verify replication user exists
+  become_user: postgres
+  shell: psql -X -d postgres -tc "SELECT rolname FROM pg_roles WHERE rolname='{{ replication_user }}';"
+  register: replication_user_check
+  changed_when: false
+  timeout: 30
+
+- name: Print replication user check
+  debug:
+    var: replication_user_check.stdout
+
+- name: Create replication slot for sync standby
+  become_user: postgres
+  shell: psql -X -d postgres -c "SELECT pg_create_physical_replication_slot('sync_standby_slot') WHERE NOT EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'sync_standby_slot');"
+  changed_when: false
+  timeout: 30
+
+- name: Create replication slot for async standby
+  become_user: postgres
+  shell: psql -X -d postgres -c "SELECT pg_create_physical_replication_slot('async_standby_slot') WHERE NOT EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'async_standby_slot');"
+  changed_when: false
+  timeout: 30
+
 - name: Deploy postgresql.conf
   template:
     src: postgresql.conf.j2
@@ -58,14 +89,13 @@
     sleep 2
     systemctl start postgresql@{{ postgres_version }}-main
   register: restart_result
-  ignore_errors: yes
 
 - name: Show restart result
   debug:
     var: restart_result
 
 - name: Show PostgreSQL journal
-  shell: journalctl -xeu postgresql@{{ postgres_version }}-main --no-pager -n 100
+  shell: journalctl -xeu postgresql@{{ postgres_version }}-main --no-pager -n 50
   register: pg_journal
   changed_when: false
   ignore_errors: yes
@@ -73,16 +103,6 @@
 - name: Print PostgreSQL journal
   debug:
     var: pg_journal.stdout_lines
-
-- name: Show PostgreSQL log
-  shell: tail -100 /var/log/postgresql/postgresql-{{ postgres_version }}-main.log
-  register: pg_log
-  changed_when: false
-  ignore_errors: yes
-
-- name: Print PostgreSQL log
-  debug:
-    var: pg_log.stdout_lines
 
 - name: Wait for PostgreSQL to be ready after restart
   become_user: postgres
@@ -92,48 +112,12 @@
   delay: 5
   until: pg_ready_after.rc == 0
   changed_when: false
-  ignore_errors: yes
-
-- name: Create replication user
-  become_user: postgres
-  shell: |
-    psql -X -d postgres -tc "SELECT 1 FROM pg_roles WHERE rolname='{{ replication_user }}'" | grep -q 1 || \
-    psql -X -d postgres -c "CREATE ROLE {{ replication_user }} WITH REPLICATION LOGIN PASSWORD '{{ replication_password }}';"
-  changed_when: false
-  ignore_errors: yes
-  timeout: 30
-
-- name: Verify replication user exists
-  become_user: postgres
-  shell: psql -X -d postgres -tc "SELECT rolname FROM pg_roles WHERE rolname='{{ replication_user }}';"
-  register: replication_user_check
-  changed_when: false
-  timeout: 30
-
-- name: Print replication user check
-  debug:
-    var: replication_user_check.stdout
-
-- name: Create replication slot for sync standby
-  become_user: postgres
-  shell: psql -X -d postgres -c "SELECT pg_create_physical_replication_slot('sync_standby_slot') WHERE NOT EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'sync_standby_slot');"
-  changed_when: false
-  ignore_errors: yes
-  timeout: 30
-
-- name: Create replication slot for async standby
-  become_user: postgres
-  shell: psql -X -d postgres -c "SELECT pg_create_physical_replication_slot('async_standby_slot') WHERE NOT EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'async_standby_slot');"
-  changed_when: false
-  ignore_errors: yes
-  timeout: 30
 
 - name: Verify primary is accepting connections
   become_user: postgres
   shell: psql -X -d postgres -c "SELECT version();"
   register: pg_version
   changed_when: false
-  ignore_errors: yes
   timeout: 30
 
 - name: Show PostgreSQL version
