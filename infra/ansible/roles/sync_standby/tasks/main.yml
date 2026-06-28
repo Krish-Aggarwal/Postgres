@@ -3,15 +3,13 @@
   service:
     name: "{{ postgres_service }}"
     state: stopped
+  ignore_errors: yes
 
-- name: Check if data directory exists
-  stat:
-    path: "{{ postgres_data_dir }}/PG_VERSION"
-  register: standby_initialized
+- name: Reset failed systemd unit
+  shell: systemctl reset-failed postgresql@{{ postgres_version }}-main || true
 
 - name: Drop existing cluster on sync standby
   shell: pg_dropcluster --stop {{ postgres_version }} main || true
-  when: standby_initialized.stat.exists
 
 - name: Remove data directory
   file:
@@ -48,12 +46,25 @@
     line: "application_name = 'sync_standby_az_b'"
     state: present
 
+- name: Recreate cluster config using existing data directory
+  shell: pg_createcluster {{ postgres_version }} main --datadir {{ postgres_data_dir }} || true
+
 - name: Set correct ownership on data directory
   file:
     path: "{{ postgres_data_dir }}"
     owner: postgres
     group: postgres
     recurse: yes
+
+- name: Set correct ownership on config directory
+  file:
+    path: /etc/postgresql/{{ postgres_version }}/main
+    owner: postgres
+    group: postgres
+    recurse: yes
+
+- name: Reset failed systemd unit before start
+  shell: systemctl reset-failed postgresql@{{ postgres_version }}-main || true
 
 - name: Start PostgreSQL on sync standby
   service:
@@ -72,7 +83,7 @@
 
 - name: Verify sync standby is in recovery mode
   become_user: postgres
-  shell: psql -c "SELECT pg_is_in_recovery();"
+  shell: psql -X -d postgres -c "SELECT pg_is_in_recovery();"
   register: recovery_check
   failed_when: "'t' not in recovery_check.stdout"
   changed_when: false
