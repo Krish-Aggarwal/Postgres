@@ -39,18 +39,29 @@
     path: /var/run/postgresql/{{ postgres_version }}-main.pid
     state: absent
 
-- name: Check if PostgreSQL cluster is initialized
+- name: Check if PostgreSQL data directory is initialized
   stat:
     path: "{{ postgres_data_dir }}/PG_VERSION"
-  register: pg_initialized
+  register: pg_data_initialized
 
-- name: Drop broken cluster if not initialized
+- name: Check if PostgreSQL config directory exists
+  stat:
+    path: "{{ postgres_conf_dir }}/postgresql.conf"
+  register: pg_conf_exists
+
+- name: Drop broken cluster if data missing
   shell: pg_dropcluster --stop {{ postgres_version }} main || true
-  when: not pg_initialized.stat.exists
+  when: not pg_data_initialized.stat.exists
 
 - name: Create fresh PostgreSQL cluster
   shell: pg_createcluster {{ postgres_version }} main
-  when: not pg_initialized.stat.exists
+  when: not pg_data_initialized.stat.exists
+
+- name: Recreate cluster config if config directory missing but data exists
+  shell: pg_createcluster {{ postgres_version }} main --datadir {{ postgres_data_dir }} || true
+  when:
+    - pg_data_initialized.stat.exists
+    - not pg_conf_exists.stat.exists
 
 - name: Show cluster status before start
   shell: pg_lsclusters
