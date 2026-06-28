@@ -35,6 +35,15 @@
     group: postgres
     mode: '0644'
 
+  - name: Verify postgresql.conf data_directory line
+  shell: grep data_directory {{ postgres_conf_dir }}/postgresql.conf
+  register: conf_check
+  changed_when: false
+
+- name: Print data_directory value
+  debug:
+    var: conf_check.stdout
+
 - name: Deploy pg_hba.conf
   template:
     src: pg_hba.conf.j2
