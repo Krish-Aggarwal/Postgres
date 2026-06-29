@@ -1,22 +1,15 @@
----
-- name: Stop PostgreSQL on async standby
+- name: Stop PostgreSQL
   service:
-    name: "{{ postgres_service }}"
+    name: postgresql
     state: stopped
   ignore_errors: yes
 
-- name: Reset failed systemd unit
-  shell: systemctl reset-failed postgresql@{{ postgres_version }}-main || true
-
-- name: Drop existing cluster
-  shell: pg_dropcluster --stop {{ postgres_version }} main || true
-
-- name: Remove old data directory
+- name: Clean data directory
   file:
     path: "{{ postgres_data_dir }}"
     state: absent
 
-- name: Create clean data directory
+- name: Recreate data directory
   file:
     path: "{{ postgres_data_dir }}"
     state: directory
@@ -24,7 +17,7 @@
     group: postgres
     mode: "0700"
 
-- name: Take base backup from primary
+- name: Run basebackup from primary
   become_user: postgres
   shell: |
     pg_basebackup \
@@ -37,47 +30,23 @@
       --slot=async_standby_slot
   environment:
     PGPASSWORD: "{{ replication_password }}"
-  register: basebackup
-  failed_when: basebackup.rc != 0
 
-- name: Ensure standby signal exists
+- name: Create standby.signal
   file:
     path: "{{ postgres_data_dir }}/standby.signal"
     state: touch
     owner: postgres
     group: postgres
 
-- name: Fix ownership of data directory
+- name: Fix ownership
   file:
     path: "{{ postgres_data_dir }}"
     owner: postgres
     group: postgres
     recurse: yes
 
-- name: Reset systemd unit
-  shell: systemctl reset-failed postgresql@{{ postgres_version }}-main || true
-
-- name: Start PostgreSQL async standby
+- name: Start PostgreSQL
   service:
-    name: "{{ postgres_service }}"
+    name: postgresql@{{ postgres_version }}-main
     state: started
     enabled: yes
-
-- name: Wait for PostgreSQL
-  become_user: postgres
-  shell: pg_isready -p {{ postgres_port }}
-  register: pg_ready
-  retries: 20
-  delay: 3
-  until: pg_ready.rc == 0
-  changed_when: false
-
-- name: Verify recovery mode
-  become_user: postgres
-  shell: psql -tAc "SELECT pg_is_in_recovery();"
-  register: recovery
-  failed_when: "'t' not in recovery.stdout"
-  changed_when: false
-
-- debug:
-    msg: "{{ recovery.stdout }}"
