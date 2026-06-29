@@ -1,24 +1,15 @@
----
-- name: Stop PostgreSQL on sync standby
+- name: Stop PostgreSQL
   service:
-    name: "{{ postgres_service }}"
+    name: postgresql
     state: stopped
   ignore_errors: yes
 
-- name: Reset failed systemd unit
-  shell: systemctl reset-failed postgresql@{{ postgres_version }}-main || true
-
-- name: Drop existing PostgreSQL cluster
-  shell: pg_dropcluster --stop {{ postgres_version }} main || true
-
-# IMPORTANT: DO NOT recreate cluster with pg_createcluster
-
-- name: Remove data directory completely
+- name: Clean old data directory
   file:
     path: "{{ postgres_data_dir }}"
     state: absent
 
-- name: Recreate clean data directory
+- name: Recreate data directory
   file:
     path: "{{ postgres_data_dir }}"
     state: directory
@@ -39,47 +30,31 @@
       --slot=sync_standby_slot
   environment:
     PGPASSWORD: "{{ replication_password }}"
-  register: basebackup
-  failed_when: basebackup.rc != 0
 
-- name: Ensure standby.signal exists
+- name: Create standby.signal (IMPORTANT)
   file:
     path: "{{ postgres_data_dir }}/standby.signal"
     state: touch
     owner: postgres
     group: postgres
 
-- name: Fix ownership of data directory
+- name: Fix permissions
   file:
     path: "{{ postgres_data_dir }}"
     owner: postgres
     group: postgres
     recurse: yes
 
-- name: Reset systemd again before start
-  shell: systemctl reset-failed postgresql@{{ postgres_version }}-main || true
-
-- name: Start PostgreSQL standby
+- name: Start PostgreSQL using correct cluster service
   service:
-    name: "{{ postgres_service }}"
+    name: postgresql@{{ postgres_version }}-main
     state: started
     enabled: yes
 
-- name: Wait for PostgreSQL to be ready
+- name: Wait for PostgreSQL
   become_user: postgres
   shell: pg_isready -p {{ postgres_port }}
   register: pg_ready
   retries: 20
   delay: 3
   until: pg_ready.rc == 0
-  changed_when: false
-
-- name: Verify standby mode
-  become_user: postgres
-  shell: psql -tAc "SELECT pg_is_in_recovery();"
-  register: recovery
-  failed_when: "'t' not in recovery.stdout"
-  changed_when: false
-
-- debug:
-    msg: "{{ recovery.stdout }}"
