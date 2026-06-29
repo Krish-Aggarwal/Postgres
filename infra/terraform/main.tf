@@ -57,14 +57,6 @@ async_standby
 
 [all:vars]
 ansible_user=ubuntu
-
-[primary:vars]
-ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyJump=ubuntu@${module.ec2.bastion_public_ip}'
-
-[sync_standby:vars]
-ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyJump=ubuntu@${module.ec2.bastion_public_ip}'
-
-[async_standby:vars]
 ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyJump=ubuntu@${module.ec2.bastion_public_ip}'
 EOF
 
