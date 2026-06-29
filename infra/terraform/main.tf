@@ -40,16 +40,16 @@ module "ec2" {
 resource "local_file" "inventory" {
   content = <<-EOF
 [bastion]
-bastion ansible_host=${module.ec2.bastion_public_ip}
+bastion_node ansible_host=${module.ec2.bastion_public_ip}
 
 [primary]
-primary ansible_host=${module.ec2.primary_private_ip}
+primary_node ansible_host=${module.ec2.primary_private_ip}
 
 [sync_standby]
-sync_standby ansible_host=${module.ec2.sync_standby_private_ip}
+sync_standby_node ansible_host=${module.ec2.sync_standby_private_ip}
 
 [async_standby]
-async_standby ansible_host=${module.ec2.async_standby_private_ip}
+async_standby_node ansible_host=${module.ec2.async_standby_private_ip}
 
 [standby:children]
 sync_standby
@@ -67,5 +67,6 @@ ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyJump=ubuntu@${modul
 [async_standby:vars]
 ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyJump=ubuntu@${module.ec2.bastion_public_ip}'
 EOF
+
   filename = "${path.module}/../ansible/inventory.ini"
 }
