@@ -11,6 +11,9 @@
     state: present
     update_cache: yes
 
+# -----------------------------
+# PostgreSQL repository setup
+# -----------------------------
 - name: Add PostgreSQL signing key
   apt_key:
     url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
@@ -22,6 +25,9 @@
     state: present
     filename: pgdg
 
+# -----------------------------
+# Install PostgreSQL
+# -----------------------------
 - name: Install PostgreSQL packages
   apt:
     name:
@@ -31,8 +37,11 @@
     state: present
     update_cache: yes
 
+# -----------------------------
+# Safety reset before HA config
+# -----------------------------
 - name: Ensure PostgreSQL service is stopped (safe for HA setup)
-  service:
+  systemd:
     name: "{{ postgres_service }}"
     state: stopped
   ignore_errors: yes
@@ -40,6 +49,9 @@
 - name: Reset systemd failures
   shell: systemctl reset-failed postgresql@{{ postgres_version }}-main || true
 
+# -----------------------------
+# Cluster inspection
+# -----------------------------
 - name: Show cluster status
   shell: pg_lsclusters
   register: cluster_status
@@ -49,17 +61,44 @@
   debug:
     var: cluster_status.stdout_lines
 
+# -----------------------------
+# Service enable (DO NOT trust this alone)
+# -----------------------------
 - name: Enable PostgreSQL service
   systemd:
     name: "{{ postgres_service }}"
     enabled: yes
 
-- name: Wait for PostgreSQL (if already running)
-  become_user: postgres
-  shell: pg_isready -p {{ postgres_port }}
-  register: pg_ready
+- name: Start PostgreSQL service
+  systemd:
+    name: "{{ postgres_service }}"
+    state: started
+
+# -----------------------------
+# FIX: Proper readiness checks
+# -----------------------------
+
+- name: Wait for systemd to report active
+  shell: systemctl is-active {{ postgres_service }}
+  register: pg_systemd
   retries: 10
+  delay: 2
+  until: pg_systemd.stdout.find("active") != -1
+
+- name: Wait for PostgreSQL socket to be ready
+  shell: pg_isready -h 127.0.0.1 -p {{ postgres_port }}
+  register: pg_ready
+  retries: 20
   delay: 3
   until: pg_ready.rc == 0
   changed_when: false
-  ignore_errors: yes
+
+- name: Validate PostgreSQL accepts SQL queries
+  become: yes
+  become_user: postgres
+  shell: psql -c "SELECT 1;"
+  register: sql_check
+  retries: 20
+  delay: 3
+  until: sql_check.rc == 0
+  changed_when: false
