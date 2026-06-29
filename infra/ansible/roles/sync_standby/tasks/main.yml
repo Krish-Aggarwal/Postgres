@@ -11,20 +11,14 @@
 - name: Drop existing PostgreSQL cluster
   shell: pg_dropcluster --stop {{ postgres_version }} main || true
 
-- name: Create fresh PostgreSQL cluster
-  shell: pg_createcluster {{ postgres_version }} main
+# IMPORTANT: DO NOT recreate cluster with pg_createcluster
 
-- name: Stop newly created cluster
-  service:
-    name: "{{ postgres_service }}"
-    state: stopped
-
-- name: Remove initialized data directory
+- name: Remove data directory completely
   file:
     path: "{{ postgres_data_dir }}"
     state: absent
 
-- name: Recreate empty data directory
+- name: Recreate clean data directory
   file:
     path: "{{ postgres_data_dir }}"
     state: directory
@@ -32,7 +26,7 @@
     group: postgres
     mode: "0700"
 
-- name: Take base backup from primary
+- name: Run base backup from primary
   become_user: postgres
   shell: |
     pg_basebackup \
@@ -48,36 +42,30 @@
   register: basebackup
   failed_when: basebackup.rc != 0
 
-- name: Set standby application_name
-  lineinfile:
-    path: "{{ postgres_data_dir }}/postgresql.auto.conf"
-    regexp: '^application_name'
-    line: "application_name = 'sync_standby_az_b'"
+- name: Ensure standby.signal exists
+  file:
+    path: "{{ postgres_data_dir }}/standby.signal"
+    state: touch
+    owner: postgres
+    group: postgres
 
-- name: Ensure postgres owns data directory
+- name: Fix ownership of data directory
   file:
     path: "{{ postgres_data_dir }}"
     owner: postgres
     group: postgres
     recurse: yes
 
-- name: Ensure config directory ownership
-  file:
-    path: "/etc/postgresql/{{ postgres_version }}/main"
-    owner: root
-    group: postgres
-    recurse: yes
-
-- name: Reset failed unit
+- name: Reset systemd again before start
   shell: systemctl reset-failed postgresql@{{ postgres_version }}-main || true
 
-- name: Start PostgreSQL
+- name: Start PostgreSQL standby
   service:
     name: "{{ postgres_service }}"
     state: started
     enabled: yes
 
-- name: Wait until PostgreSQL is accepting connections
+- name: Wait for PostgreSQL to be ready
   become_user: postgres
   shell: pg_isready -p {{ postgres_port }}
   register: pg_ready
@@ -86,10 +74,12 @@
   until: pg_ready.rc == 0
   changed_when: false
 
-- name: Verify standby is in recovery
+- name: Verify standby mode
   become_user: postgres
   shell: psql -tAc "SELECT pg_is_in_recovery();"
   register: recovery
+  failed_when: "'t' not in recovery.stdout"
+  changed_when: false
 
 - debug:
     msg: "{{ recovery.stdout }}"
