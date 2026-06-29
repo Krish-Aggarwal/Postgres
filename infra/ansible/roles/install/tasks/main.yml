@@ -11,18 +11,18 @@
     state: present
     update_cache: yes
 
-- name: Add PostgreSQL apt signing key
+- name: Add PostgreSQL signing key
   apt_key:
     url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
     state: present
 
-- name: Add PostgreSQL apt repository
+- name: Add PostgreSQL repo
   apt_repository:
     repo: "deb http://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
     state: present
     filename: pgdg
 
-- name: Install PostgreSQL {{ postgres_version }}
+- name: Install PostgreSQL packages
   apt:
     name:
       - postgresql-{{ postgres_version }}
@@ -31,78 +31,35 @@
     state: present
     update_cache: yes
 
-- name: Reset failed systemd unit
+- name: Ensure PostgreSQL service is stopped (safe for HA setup)
+  service:
+    name: "{{ postgres_service }}"
+    state: stopped
+  ignore_errors: yes
+
+- name: Reset systemd failures
   shell: systemctl reset-failed postgresql@{{ postgres_version }}-main || true
 
-- name: Remove stale pid file if present
-  file:
-    path: /var/run/postgresql/{{ postgres_version }}-main.pid
-    state: absent
-
-- name: Check if PostgreSQL data directory is initialized
-  stat:
-    path: "{{ postgres_data_dir }}/PG_VERSION"
-  register: pg_data_initialized
-
-- name: Check if PostgreSQL config directory exists
-  stat:
-    path: "{{ postgres_conf_dir }}/postgresql.conf"
-  register: pg_conf_exists
-
-- name: Drop broken cluster if data missing
-  shell: pg_dropcluster --stop {{ postgres_version }} main || true
-  when: not pg_data_initialized.stat.exists
-
-- name: Create fresh PostgreSQL cluster
-  shell: pg_createcluster {{ postgres_version }} main
-  when: not pg_data_initialized.stat.exists
-
-- name: Recreate cluster config if config directory missing but data exists
-  shell: pg_createcluster {{ postgres_version }} main --datadir {{ postgres_data_dir }} || true
-  when:
-    - pg_data_initialized.stat.exists
-    - not pg_conf_exists.stat.exists
-
-- name: Show cluster status before start
+- name: Show cluster status
   shell: pg_lsclusters
   register: cluster_status
   changed_when: false
 
-- name: Print cluster status
+- name: Debug cluster status
   debug:
     var: cluster_status.stdout_lines
 
-- name: Start PostgreSQL cluster using pg_ctlcluster
-  shell: pg_ctlcluster {{ postgres_version }} main start
-  become: yes
-  register: start_result
-  ignore_errors: yes
-
-- name: Print start result
-  debug:
-    var: start_result
-
-- name: Show PostgreSQL journal if start failed
-  shell: journalctl -xeu postgresql@{{ postgres_version }}-main --no-pager -n 50
-  register: pg_journal
-  changed_when: false
-  ignore_errors: yes
-  when: start_result.rc is defined and start_result.rc != 0
-
-- name: Print journal
-  debug:
-    var: pg_journal.stdout_lines
-  when: start_result.rc is defined and start_result.rc != 0
-
 - name: Enable PostgreSQL service
-  shell: systemctl enable {{ postgres_service }}
-  become: yes
+  systemd:
+    name: "{{ postgres_service }}"
+    enabled: yes
 
-- name: Wait for PostgreSQL to be ready
+- name: Wait for PostgreSQL (if already running)
   become_user: postgres
-  shell: pg_isready -h /var/run/postgresql -p {{ postgres_port }}
+  shell: pg_isready -p {{ postgres_port }}
   register: pg_ready
-  retries: 15
+  retries: 10
   delay: 3
   until: pg_ready.rc == 0
   changed_when: false
+  ignore_errors: yes
