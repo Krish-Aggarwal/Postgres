@@ -1,29 +1,20 @@
-#------------------------------------------------------------------------------
 # FILE LOCATIONS
-#------------------------------------------------------------------------------
-data_directory            = '{{ postgres_data_dir }}'
-hba_file                  = '{{ postgres_conf_dir }}/pg_hba.conf'
+data_directory = '{{ postgres_data_dir }}'
+hba_file = '{{ postgres_conf_dir }}/pg_hba.conf'
 
-#------------------------------------------------------------------------------
 # CONNECTION
-#------------------------------------------------------------------------------
 listen_addresses = '*'
 port = {{ postgres_port | default(5432) }}
 max_connections = 100
 
-#------------------------------------------------------------------------------
-# REPLICATION
-#------------------------------------------------------------------------------
+# REPLICATION (PRIMARY ONLY)
 wal_level = replica
 max_wal_senders = 10
-wal_keep_size = '512MB'
+wal_keep_size = 512MB
 max_replication_slots = 10
-hot_standby = on
 synchronous_standby_names = 'FIRST 1 (sync_standby_az_b)'
 
-#------------------------------------------------------------------------------
 # PERFORMANCE
-#------------------------------------------------------------------------------
 shared_buffers = 128MB
 work_mem = 4MB
 maintenance_work_mem = 64MB
@@ -31,9 +22,7 @@ effective_cache_size = 256MB
 checkpoint_completion_target = 0.9
 wal_buffers = 16MB
 
-#------------------------------------------------------------------------------
 # LOGGING
-#------------------------------------------------------------------------------
 logging_collector = on
 log_directory = 'log'
 log_filename = 'postgresql-%Y-%m-%d.log'
