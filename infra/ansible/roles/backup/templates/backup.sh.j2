@@ -2,33 +2,21 @@
 set -euo pipefail
 
 DATE=$(date +%F-%H-%M)
+
 BACKUP_FILE="{{ backup_dir }}/postgres-${DATE}.sql"
 S3_PATH="s3://{{ backup_bucket }}/backup/postgres-${DATE}.sql"
 LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')] BACKUP"
 
 echo "${LOG_PREFIX} Starting backup..."
 
-# Dump all databases as postgres user
 sudo -u postgres pg_dumpall > "${BACKUP_FILE}"
-
-if [ $? -ne 0 ]; then
-    echo "${LOG_PREFIX} ERROR: pg_dumpall failed"
-    exit 1
-fi
 
 echo "${LOG_PREFIX} Dump created: ${BACKUP_FILE}"
 
-# Upload to S3 using EC2 IAM instance profile
 aws s3 cp "${BACKUP_FILE}" "${S3_PATH}"
-
-if [ $? -ne 0 ]; then
-    echo "${LOG_PREFIX} ERROR: S3 upload failed"
-    exit 1
-fi
 
 echo "${LOG_PREFIX} Uploaded to: ${S3_PATH}"
 
-# Clean up local file
 rm -f "${BACKUP_FILE}"
-echo "${LOG_PREFIX} Local file removed"
+
 echo "${LOG_PREFIX} Backup completed successfully"
