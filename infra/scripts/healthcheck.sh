@@ -6,60 +6,39 @@ echo "======================================="
 echo " PostgreSQL Cluster Health Check"
 echo "======================================="
 
-echo
-echo "Checking PostgreSQL Service..."
-systemctl is-active postgresql@17-main
+# dynamically resolve paths from Jenkins workspace
+BASE_DIR="${WORKSPACE:-$(pwd)}"
+INVENTORY="${BASE_DIR}/infra/ansible/inventory.ini"
 
-echo
-echo "Checking PostgreSQL Connectivity..."
-sudo -u postgres psql -c "SELECT now();"
+echo "Using inventory: $INVENTORY"
 
-echo
-echo "Checking Recovery Mode..."
-sudo -u postgres psql -t -c "SELECT pg_is_in_recovery();"
+echo ""
+echo "Checking PostgreSQL service status..."
+echo "--------------------------------------"
 
-echo
-echo "Checking Replication Status..."
+for node in primary sync_standby async_standby
+do
+    echo ""
+    echo "Node: $node"
 
-RECOVERY=$(sudo -u postgres psql -t -A -c "SELECT pg_is_in_recovery();")
+    ansible "$node" \
+        -i "$INVENTORY" \
+        -b \
+        -m shell \
+        -a "systemctl is-active postgresql@17-main"
+done
 
-if [ "$RECOVERY" = "f" ]; then
 
-    echo "This is PRIMARY"
+echo ""
+echo "Checking replication status on primary..."
+echo "--------------------------------------"
 
-    sudo -u postgres psql -c "
-    SELECT
-        client_addr,
-        application_name,
-        state,
-        sync_state
-    FROM pg_stat_replication;
-    "
+ansible primary \
+    -i "$INVENTORY" \
+    -b \
+    -m shell \
+    -a "sudo -u postgres psql -c \"SELECT client_addr, state, sync_state FROM pg_stat_replication;\""
 
-else
 
-    echo "This is STANDBY"
-
-    sudo -u postgres psql -c "
-    SELECT
-        status,
-        receive_start_lsn,
-        received_lsn,
-        latest_end_lsn
-    FROM pg_stat_wal_receiver;
-    "
-
-fi
-
-echo
-echo "Disk Usage"
-
-df -h
-
-echo
-echo "Memory"
-
-free -m
-
-echo
-echo "Health Check Completed Successfully"
+echo ""
+echo "Health check completed successfully"
