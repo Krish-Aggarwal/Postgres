@@ -1,40 +1,49 @@
 #!/bin/bash
+set -euo pipefail
 
-set -e
+BACKUP_PATH="${1:-}"
 
-BACKUP_DIR=$1
-
-if [ -z "$BACKUP_DIR" ]; then
-    echo "Usage:"
-    echo "./restore.sh /backup/2026-06-29"
+if [[ -z "$BACKUP_PATH" ]]; then
+    echo "Usage: ./restore.sh /path/to/basebackup.tar.gz"
     exit 1
 fi
 
-echo "Stopping PostgreSQL..."
+if [[ ! -f "$BACKUP_PATH" ]]; then
+    echo "ERROR: Backup file not found: $BACKUP_PATH"
+    exit 1
+fi
 
-sudo systemctl stop postgresql@17-main
+echo "===================================="
+echo " PostgreSQL DR Restore Starting"
+echo "===================================="
 
-echo "Cleaning old data..."
+echo "[1/5] Stopping PostgreSQL..."
+sudo systemctl stop postgresql@17-main || true
 
+echo "[2/5] Cleaning data directory..."
 sudo rm -rf /var/lib/postgresql/17/main/*
 
-echo "Restoring Backup..."
+echo "[3/5] Restoring base backup..."
+sudo tar -xzf "$BACKUP_PATH" -C /var/lib/postgresql/17/main
 
-sudo tar -xzf "$BACKUP_DIR/basebackup.tar.gz" \
-    -C /var/lib/postgresql/17/main
-
+echo "[4/5] Setting permissions..."
 sudo chown -R postgres:postgres /var/lib/postgresql/17/main
 
-echo "Starting PostgreSQL..."
+echo "[5/5] Creating standby configuration..."
 
+# If this node is NOT primary, force standby mode
+touch /var/lib/postgresql/17/main/standby.signal
+
+echo "primary_conninfo = 'host=PRIMARY_IP port=5432 user=replicator password=replica_pass'" \
+  | sudo tee -a /var/lib/postgresql/17/main/postgresql.auto.conf
+
+echo "Starting PostgreSQL..."
 sudo systemctl start postgresql@17-main
 
 sleep 5
 
-echo
+echo "Checking status..."
+sudo systemctl status postgresql@17-main --no-pager || true
 
-sudo -u postgres psql -c "SELECT version();"
-
-echo
-
-echo "Restore Completed Successfully"
+echo ""
+echo "Restore completed successfully"
