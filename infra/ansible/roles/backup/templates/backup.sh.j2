@@ -3,9 +3,14 @@ set -euo pipefail
 
 DATE=$(date +%F-%H-%M)
 
-BACKUP_FILE="{{ backup_dir }}/postgres-${DATE}.sql"
-S3_PATH="s3://{{ backup_bucket }}/backup/postgres-${DATE}.sql"
+BACKUP_DIR="/var/lib/postgres-backup"
+S3_BUCKET="{{ backup_bucket }}"
+
+BACKUP_FILE="${BACKUP_DIR}/postgres-${DATE}.sql"
+S3_PATH="s3://${S3_BUCKET}/backup/postgres-${DATE}.sql"
 LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')] BACKUP"
+
+mkdir -p "${BACKUP_DIR}"
 
 echo "${LOG_PREFIX} Starting backup..."
 
@@ -15,7 +20,10 @@ echo "${LOG_PREFIX} Dump created: ${BACKUP_FILE}"
 
 aws s3 cp "${BACKUP_FILE}" "${S3_PATH}"
 
-echo "${LOG_PREFIX} Uploaded to: ${S3_PATH}"
+if [ $? -ne 0 ]; then
+    echo "${LOG_PREFIX} ERROR: S3 upload failed"
+    exit 1
+fi
 
 rm -f "${BACKUP_FILE}"
 
