@@ -1,4 +1,3 @@
----
 - name: Create backup directory
   file:
     path: "{{ backup_dir }}"
@@ -6,6 +5,12 @@
     owner: postgres
     group: postgres
     mode: '0750'
+
+- name: Ensure AWS CLI is installed
+  apt:
+    name: awscli
+    state: present
+    update_cache: yes
 
 - name: Deploy backup script
   template:
@@ -16,18 +21,19 @@
     mode: '0755'
 
 - name: Create log file for backup
-  file:
-    path: /var/log/pg_backup.log
-    state: touch
+  copy:
+    content: ""
+    dest: /var/log/pg_backup.log
     owner: postgres
     group: postgres
     mode: '0644'
+    force: no
 
 - name: Create cron job - daily backup at 2am UTC
   cron:
     name: "PostgreSQL daily S3 backup"
     minute: "0"
     hour: "2"
-    job: "/usr/local/bin/postgres_backup.sh >> /var/log/pg_backup.log 2>&1"
     user: postgres
+    job: "flock -n /tmp/pg_backup.lock /usr/local/bin/postgres_backup.sh >> /var/log/pg_backup.log 2>&1"
     state: present
