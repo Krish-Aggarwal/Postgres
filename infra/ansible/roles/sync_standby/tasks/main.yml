@@ -8,16 +8,6 @@
 - name: Reset failed systemd unit
   shell: systemctl reset-failed postgresql@{{ postgres_version }}-main || true
 
-- name: Drop existing PostgreSQL cluster
-  shell: pg_dropcluster --stop {{ postgres_version }} main || true
-
-# IMPORTANT: DO NOT recreate cluster with pg_createcluster
-
-- name: Remove data directory completely
-  file:
-    path: "{{ postgres_data_dir }}"
-    state: absent
-
 - name: Recreate clean data directory
   file:
     path: "{{ postgres_data_dir }}"
@@ -25,6 +15,9 @@
     owner: postgres
     group: postgres
     mode: "0700"
+
+  - name: Clean data directory
+    shell: rm -rf {{ postgres_data_dir }}/*
 
 - name: Run base backup from primary
   become_user: postgres
