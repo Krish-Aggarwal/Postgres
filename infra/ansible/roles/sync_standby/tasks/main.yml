@@ -7,8 +7,9 @@
 
 - name: Reset failed systemd unit
   shell: systemctl reset-failed postgresql@{{ postgres_version }}-main || true
+  changed_when: false
 
-- name: Recreate clean data directory
+- name: Ensure PostgreSQL data directory exists
   file:
     path: "{{ postgres_data_dir }}"
     state: directory
@@ -16,10 +17,12 @@
     group: postgres
     mode: "0700"
 
-  - name: Clean data directory
-    shell: rm -rf {{ postgres_data_dir }}/*
+- name: Clean PostgreSQL data directory
+  shell: find {{ postgres_data_dir }} -mindepth 1 -delete
+  changed_when: true
 
 - name: Run base backup from primary
+  become: yes
   become_user: postgres
   shell: |
     pg_basebackup \
@@ -35,22 +38,16 @@
   register: basebackup
   failed_when: basebackup.rc != 0
 
-- name: Ensure standby.signal exists
-  file:
-    path: "{{ postgres_data_dir }}/standby.signal"
-    state: touch
-    owner: postgres
-    group: postgres
-
-- name: Fix ownership of data directory
+- name: Fix ownership of PostgreSQL data directory
   file:
     path: "{{ postgres_data_dir }}"
     owner: postgres
     group: postgres
     recurse: yes
 
-- name: Reset systemd again before start
+- name: Reset failed systemd unit again
   shell: systemctl reset-failed postgresql@{{ postgres_version }}-main || true
+  changed_when: false
 
 - name: Start PostgreSQL standby
   service:
@@ -58,7 +55,8 @@
     state: started
     enabled: yes
 
-- name: Wait for PostgreSQL to be ready
+- name: Wait for PostgreSQL to accept connections
+  become: yes
   become_user: postgres
   shell: pg_isready -p {{ postgres_port }}
   register: pg_ready
@@ -67,12 +65,14 @@
   until: pg_ready.rc == 0
   changed_when: false
 
-- name: Verify standby mode
+- name: Verify standby is in recovery mode
+  become: yes
   become_user: postgres
   shell: psql -tAc "SELECT pg_is_in_recovery();"
   register: recovery
-  failed_when: "'t' not in recovery.stdout"
+  failed_when: recovery.stdout.strip() != "t"
   changed_when: false
 
-- debug:
-    msg: "{{ recovery.stdout }}"
+- name: Display standby status
+  debug:
+    msg: "Sync standby is running in recovery mode: {{ recovery.stdout.strip() }}"
