@@ -1,3 +1,4 @@
+---
 - name: Stop PostgreSQL
   service:
     name: postgresql
@@ -17,25 +18,37 @@
     group: postgres
     mode: "0700"
 
-- name: Configure primary_conninfo
+- name: Run base backup from primary
+  become: yes
+  become_user: postgres
+  shell: |
+    pg_basebackup \
+      -h {{ hostvars[groups['primary'][0]]['ansible_host'] }} \
+      -D {{ postgres_data_dir }} \
+      -U {{ replication_user }} \
+      -P \
+      -R \
+      --wal-method=stream \
+      --slot=sync_standby_slot
+  environment:
+    PGPASSWORD: "{{ replication_password }}"
+
+- name: Configure primary_conninfo with application_name
   lineinfile:
     path: "{{ postgres_data_dir }}/postgresql.auto.conf"
     regexp: '^primary_conninfo'
-    line: >-
-      primary_conninfo = 'host={{ hostvars[groups["primary"][0]].ansible_host }}
-      port={{ postgres_port }}
-      user={{ replication_user }}
-      password={{ replication_password }}
-      application_name=sync_standby'
-  owner: postgres
-  group: postgres
+    line: "primary_conninfo = 'host={{ hostvars[groups['primary'][0]]['ansible_host'] }} port={{ postgres_port }} user={{ replication_user }} password={{ replication_password }} application_name=sync_standby_az_b'"
+    owner: postgres
+    group: postgres
+    mode: "0600"
 
-- name: Create standby.signal (IMPORTANT)
+- name: Ensure standby.signal exists
   file:
     path: "{{ postgres_data_dir }}/standby.signal"
     state: touch
     owner: postgres
     group: postgres
+    mode: "0600"
 
 - name: Fix permissions
   file:
@@ -44,13 +57,14 @@
     group: postgres
     recurse: yes
 
-- name: Start PostgreSQL using correct cluster service
+- name: Start PostgreSQL
   service:
-    name: postgresql@{{ postgres_version }}-main
+    name: "postgresql@{{ postgres_version }}-main"
     state: started
     enabled: yes
 
 - name: Wait for PostgreSQL
+  become: yes
   become_user: postgres
   shell: pg_isready -p {{ postgres_port }}
   register: pg_ready
