@@ -23,7 +23,7 @@
   become_user: postgres
   shell: |
     pg_basebackup \
-      -h {{ hostvars[groups['primary'][0]]['ansible_host'] }} \
+      -h {{ hostvars[groups['primary'][0]].ansible_host }} \
       -D {{ postgres_data_dir }} \
       -U {{ replication_user }} \
       -P \
