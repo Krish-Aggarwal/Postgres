@@ -39,37 +39,37 @@ module "ec2" {
 
 resource "local_file" "inventory" {
   content = <<-EOF
-[bastion_nodes]
+[bastion]
 bastion ansible_host=${module.ec2.bastion_public_ip} ansible_user=ubuntu
 
-[primary_nodes]
+[primary]
 primary ansible_host=${module.ec2.primary_private_ip} ansible_user=ubuntu
 
-[sync_standby_nodes]
+[sync_standby]
 sync_standby ansible_host=${module.ec2.sync_standby_private_ip} ansible_user=ubuntu
 
-[async_standby_nodes]
+[async_standby]
 async_standby ansible_host=${module.ec2.async_standby_private_ip} ansible_user=ubuntu
 
 [standby:children]
-sync_standby_nodes
-async_standby_nodes
+sync_standby
+async_standby
 
 [all:vars]
 ansible_user=ubuntu
-ansible_ssh_private_key_file=/var/lib/jenkins/workspace/Postgresql-3az@tmp/private_key.key
+ansible_ssh_private_key_file=/var/lib/jenkins/workspace/private_key.key
 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
 
-[bastion_nodes:vars]
+[bastion:vars]
 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
 
-[primary_nodes:vars]
+[primary:vars]
 ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyJump=ubuntu@${module.ec2.bastion_public_ip}'
 
-[sync_standby_nodes:vars]
+[sync_standby:vars]
 ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyJump=ubuntu@${module.ec2.bastion_public_ip}'
 
-[async_standby_nodes:vars]
+[async_standby:vars]
 ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyJump=ubuntu@${module.ec2.bastion_public_ip}'
 EOF
 
